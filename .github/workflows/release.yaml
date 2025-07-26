@@ -33,9 +33,17 @@ jobs:
       - name: build
         run: ./build.sh
 
+      - name: Set dynamic tag
+        id: set_tag
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-8)
+          DATE=$(TZ=UTC-8 date +'%Y%m%d')
+          echo "TAG_NAME=autobuild-$DATE-$SHORT_SHA" >> $GITHUB_OUTPUT
+
       - name: upload
         uses: ncipollo/release-action@v1
         with:
+          tag_name: ${{ steps.set_tag.outputs.TAG_NAME }}
           artifacts: "oss-browser.tar.gz"
           replacesArtifacts: true
           allowUpdates: true
