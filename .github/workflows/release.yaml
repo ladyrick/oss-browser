@@ -17,7 +17,7 @@ jobs:
 
       - name: Cache node_modules and Yarn cache
         id: cache-node
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             node_modules
@@ -43,7 +43,7 @@ jobs:
       - name: upload
         uses: ncipollo/release-action@v1
         with:
-          tag_name: ${{ steps.set_tag.outputs.TAG_NAME }}
+          tag: ${{ steps.set_tag.outputs.TAG_NAME }}
           artifacts: "oss-browser.tar.gz"
           replacesArtifacts: true
           allowUpdates: true
