@@ -199,6 +199,10 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
         setFiles(data.files);
         setParent(data.parent);
         setHasMore(data.has_more);
+      } catch (e) {
+        if (axios.isAxiosError(e)) {
+          Message.error(e.response?.data?.detail || 'oss 不知道哪里有问题！');
+        }
       } finally {
         setLoading(false);
       }
@@ -356,7 +360,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
               <Popconfirm
                 title="确认删除？"
                 onOk={async () => {
-                  await axios.post(ORIGIN + '/api/delete/', { src_keys: [record.key],src_keys2: [record.key] }, { headers: { ...oss } });
+                  await axios.post(ORIGIN + '/api/delete/', { src_keys: [record.key] }, { headers: { ...oss } });
                   updateFull();
                 }}
               >

@@ -1,13 +1,14 @@
 import { Notification, Typography } from '@arco-design/web-react';
 import clipboard from '@arco-design/web-react/es/_util/clipboard';
+import { useState } from 'react';
 import { useOssPath } from '../hooks';
 import { FileList } from './FileList';
 import { SimpleButton } from './SimpleButton';
 
 export const OssBrowser: React.FC = () => {
-  const { oss } = useOssPath();
-  const ossutilCmd = `ossutil -i ${oss.key} -k ${oss.key} -e ${oss.endpoint} ls oss://${oss.bucket}/`;
-
+  const { oss, path: initialPath } = useOssPath();
+  const [path, setPath] = useState(initialPath);
+  const ossutilCmd = `ossutil -i ${oss.key} -k ${oss.secret} -e ${oss.endpoint} ls oss://${oss.bucket}/${path}`;
   return (
     <div style={{ margin: 50, marginTop: 10 }}>
       <Typography.Title heading={4}>
@@ -18,7 +19,7 @@ export const OssBrowser: React.FC = () => {
           content="复制 ossutil 命令"
         />
       </Typography.Title>
-      <FileList />
+      <FileList onChange={setPath} />
     </div>
   );
 };

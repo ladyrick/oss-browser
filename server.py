@@ -67,8 +67,15 @@ def get_oss_bucket(
     try:
         auth = oss2.Auth(access_key, secret_key)
         bucket = oss2.Bucket(auth, endpoint, bucket_name)
+        bucket.object_exists("example")
+    except oss2.exceptions.SignatureDoesNotMatch:
+        raise HTTPException(401, "oss 认证不通过！")
+    except oss2.exceptions.AccessDenied:
+        raise HTTPException(403, "oss 拒绝访问！")
+    except oss2.exceptions.NoSuchBucket:
+        raise HTTPException(404, f"oss bucket {bucket_name!r} 不存在！")
     except Exception:
-        raise HTTPException(500, "invalid oss config")
+        raise HTTPException(500, "oss 配置无效！")
     return bucket
 
 
@@ -169,7 +176,7 @@ async def generate_share_url(
 ):
     oss_bucket = get_oss_bucket(key, secret, endpoint, bucket)
     try:
-        share_url = oss_bucket.sign_url("GET", file_key, expire)
+        share_url = oss_bucket.sign_url("GET", file_key, expire, slash_safe=True)
         return JSONResponse({"share_url": share_url})
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"生成分享链接失败: {str(e)}")
