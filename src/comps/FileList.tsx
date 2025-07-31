@@ -1,5 +1,8 @@
 import {
   Breadcrumb,
+  Button,
+  Form,
+  Grid,
   Input,
   Message,
   Modal,
@@ -8,13 +11,12 @@ import {
   Space,
   Spin,
   Table,
-  Button,
-  Upload,
-  Grid,
   Typography,
+  Upload,
 } from '@arco-design/web-react';
-import { FileList as UploadFileList } from '@arco-design/web-react/es/Upload/list';
+import clipboard from '@arco-design/web-react/es/_util/clipboard';
 import type { ColumnProps } from '@arco-design/web-react/es/Table';
+import { FileList as UploadFileList } from '@arco-design/web-react/es/Upload/list';
 import {
   IconEdit,
   IconFile,
@@ -32,7 +34,6 @@ import moment from 'moment';
 import { useEffect, useRef, useState } from 'react';
 import { useOssPath, type OssInfo } from '../hooks';
 import { SimpleButton } from './SimpleButton';
-import clipboard from '@arco-design/web-react/es/_util/clipboard';
 
 import { createPortal } from 'react-dom';
 
@@ -93,6 +94,7 @@ type ModelInfo = {
   srcPaths: string[];
   loading?: boolean;
   targetDir?: string;
+  rename?: string;
 };
 
 type RenameInfo = {
@@ -488,7 +490,6 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
               <Button
                 type="text"
                 style={{ height: 'unset', padding: '0 4px', fontSize: 14 }}
-                key="move"
                 onClick={() => {
                   if (selectedRowKeys.length) setModelInfo({ mode: 'move', root: listInfo.root, visible: true, srcPaths: selectedRowKeys });
                   else Message.warning('未选择文件或目录');
@@ -499,13 +500,33 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
               <Button
                 type="text"
                 style={{ height: 'unset', padding: '0 4px', fontSize: 14 }}
-                key="copy"
                 onClick={() => {
                   if (selectedRowKeys.length) setModelInfo({ mode: 'copy', root: listInfo.root, visible: true, srcPaths: selectedRowKeys });
                   else Message.warning('未选择文件或目录');
                 }}
               >
                 批量复制
+              </Button>
+              <Button
+                type="text"
+                status="danger"
+                style={{ height: 'unset', padding: '0 4px', fontSize: 14 }}
+                onClick={() => {
+                  if (!selectedRowKeys.length) {
+                    Message.warning('未选择文件或目录');
+                  } else {
+                    Modal.confirm({
+                      title: '确认删除？',
+                      content: `已选择 ${selectedRowKeys.length} 个项目。请谨慎！尤其是目录，会递归删除！`,
+                      async onOk() {
+                        await axios.post(ORIGIN + '/api/delete/', { src_keys: selectedRowKeys }, { headers: { ...oss } });
+                        updateFull();
+                      },
+                    });
+                  }
+                }}
+              >
+                批量删除
               </Button>
               <div className="upload-wrapper">
                 <Upload
@@ -634,14 +655,27 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
           }
           visible={modelInfo.visible}
           onOk={async () => {
-            if (modelInfo.targetDir !== undefined && modelInfo.targetDir !== listInfo.root) {
+            if ((modelInfo.targetDir !== undefined && modelInfo.targetDir !== listInfo.root) || modelInfo.rename) {
+              if (modelInfo.srcPaths.length == 1 && modelInfo.rename !== undefined && modelInfo.rename.includes('/')) {
+                if (modelInfo.srcPaths[0].endsWith('/')) {
+                  if (modelInfo.rename.indexOf('/') !== modelInfo.rename.length - 1) {
+                    Message.error('新名称无效，除非位于末尾，否则 / 无法用于目录名！');
+                    return;
+                  }
+                } else {
+                  Message.error('新名称无效，/ 无法用于文件名！');
+                  return;
+                }
+              }
+
               setModelInfo({ ...modelInfo, loading: true });
               try {
                 await axios.post(
                   ORIGIN + `/api/${modelInfo.mode}/`,
                   {
                     src_keys: modelInfo.srcPaths,
-                    target_dir: modelInfo.targetDir,
+                    target_dir: modelInfo.targetDir || modelInfo.root,
+                    rename: modelInfo.srcPaths.length === 1 ? modelInfo.rename || undefined : undefined,
                   },
                   { headers: { ...oss } },
                 );
@@ -652,10 +686,11 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
               }
             } else {
               Message.warning('源文件夹跟目标文件夹为同一文件夹！');
+              return;
             }
-            setModelInfo({ ...modelInfo, visible: false, loading: false });
+            setModelInfo(undefined);
           }}
-          onCancel={() => setModelInfo({ ...modelInfo, visible: false, loading: false })}
+          onCancel={() => setModelInfo(undefined)}
           style={{ width: '50%' }}
         >
           <Spin loading={modelInfo.loading} style={{ width: '100%' }}>
@@ -666,6 +701,20 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
                 setModelInfo({ ...modelInfo, targetDir: dir });
               }}
             />
+            <Grid.Row gutter={8} style={{ marginTop: 15 }}>
+              <Grid.Col span={5}>
+                <div style={{ lineHeight: '32px', textAlign: 'right' }}>同时重命名为：</div>
+              </Grid.Col>
+              <Grid.Col span={19}>
+                <Input
+                  disabled={modelInfo.srcPaths.length !== 1}
+                  placeholder={getBasename(modelInfo.srcPaths[0])}
+                  onChange={(value) => {
+                    setModelInfo({ ...modelInfo, rename: value || undefined });
+                  }}
+                />
+              </Grid.Col>
+            </Grid.Row>
           </Spin>
         </Modal>
       )}

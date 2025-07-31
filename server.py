@@ -40,9 +40,11 @@ def get_basename(path: str):
     return path.split("/")[-1]
 
 
-def get_target_path(source_key: str, target_dir: str):
+def get_target_path(source_key: str, target_dir: str, rename=""):
     assert target_dir == "" or target_dir.endswith("/")
-    return target_dir + get_basename(source_key)
+    if not rename:
+        return target_dir + get_basename(source_key)
+    return target_dir + rename.rstrip("/") + "/" * source_key.endswith("/")
 
 
 @app.get("/")
@@ -209,13 +211,14 @@ async def copy_file(
     bucket: str = Header(..., description="OSS Bucket 名称"),
     src_keys: list[str] = Body(..., description="文件 Key"),
     target_dir: str = Body(..., pattern=r"^(|.*/)$", description="目标文件夹"),
+    rename: str = Body("", pattern=r"^[^/]*/?$", description="复制的同时重命名"),
 ):
     oss_bucket = get_oss_bucket(key, secret, endpoint, bucket)
 
     failed = _copy_file(
         oss_bucket,
         src_keys,
-        [get_target_path(s, target_dir) for s in src_keys],
+        [get_target_path(s, target_dir, rename) for s in src_keys],
     )
 
     return JSONResponse({"ok": not failed, "failed": failed}, status_code=200)
@@ -229,13 +232,14 @@ async def move_file(
     bucket: str = Header(..., description="OSS Bucket 名称"),
     src_keys: list[str] = Body(..., description="文件 Key"),
     target_dir: str = Body(..., pattern=r"^(|.*/)$", description="目标文件夹"),
+    rename: str = Body("", pattern=r"^[^/]*/?$", description="复制的同时重命名"),
 ):
     oss_bucket = get_oss_bucket(key, secret, endpoint, bucket)
 
     failed = _move_file(
         oss_bucket,
         src_keys,
-        [get_target_path(s, target_dir) for s in src_keys],
+        [get_target_path(s, target_dir, rename) for s in src_keys],
     )
 
     return JSONResponse({"ok": not failed, "failed": failed}, status_code=200)
