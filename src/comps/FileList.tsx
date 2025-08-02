@@ -154,6 +154,11 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
   const [renameInfo, setRenameInfo] = useState<RenameInfo>();
   const [editPath, setEditPath] = useState(false);
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
+  const [isChangingRoot, setIsChangingRoot] = useState(false);
+
+  if (!isChangingRoot && pathOnUrl != listInfo.root) {
+    setListInfo({ ...listInfo, root: pathOnUrl });
+  }
 
   const localConf = getLocalConf(oss);
   const favorites: string[] = Array.from(localConf.favorites || {});
@@ -207,6 +212,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
         }
       } finally {
         setLoading(false);
+        setIsChangingRoot(false);
       }
     })();
   }, [oss, listInfo, dirSelectorMode, counter]);
@@ -228,6 +234,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
   };
 
   const changeRoot = (root: string) => {
+    setIsChangingRoot(true);
     setListInfo({ root: root, limit: undefined });
     if (!dirSelectorMode) {
       setPath(root);
