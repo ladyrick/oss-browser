@@ -139,10 +139,14 @@ const getBasename = (path: string) => {
 
 type Props = { root?: string; dirSelectorMode?: boolean; onChange?: (dir: string) => void };
 export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode = false, onChange }) => {
-  const { oss, path: pathOnUrl, setPath } = useOssPath();
-  const [listInfo, setListInfo] = useState<{ root: string; limit?: number }>({ root: dirSelectorMode ? initRoot : pathOnUrl, limit: undefined });
+  const { oss, path: pathOnUrl, setPath: setPathOnUrl } = useOssPath();
+  const [innerRoot, setInnerRoot] = useState(dirSelectorMode ? initRoot : pathOnUrl);
+
+  const curDir = dirSelectorMode ? innerRoot : pathOnUrl;
+  const setCurDir = dirSelectorMode ? setInnerRoot : setPathOnUrl;
+
   const [files, setFiles] = useState<FileType[]>();
-  const [parent, setParent] = useState<string>();
+  const [parent, setParent] = useState<string>(getParent(curDir));
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [counter, setCounter] = useState(0);
@@ -153,11 +157,8 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
   const [renameInfo, setRenameInfo] = useState<RenameInfo>();
   const [editPath, setEditPath] = useState(false);
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
-  const [isChangingRoot, setIsChangingRoot] = useState(false);
 
-  if (!isChangingRoot && !dirSelectorMode && pathOnUrl != listInfo.root) {
-    setListInfo({ ...listInfo, root: pathOnUrl });
-  }
+  const limit = useRef<number>(undefined);
 
   const localConf = getLocalConf(oss);
   const favorites: string[] = Array.from(localConf.favorites || {});
@@ -196,8 +197,8 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
         const { data } = await axios.post(
           ORIGIN + '/api/list/',
           {
-            path: listInfo.root,
-            limit: listInfo.limit,
+            path: curDir,
+            limit: limit.current,
             dir: dirSelectorMode,
           },
           { headers: { ...oss } },
@@ -211,10 +212,9 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
         }
       } finally {
         setLoading(false);
-        setIsChangingRoot(false);
       }
     })();
-  }, [oss, listInfo, dirSelectorMode, counter]);
+  }, [oss, curDir, dirSelectorMode, counter]);
 
   const sortFunction = (a: FileType, b: FileType) => {
     if (sortDirection) {
@@ -233,11 +233,8 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
   };
 
   const changeRoot = (root: string) => {
-    setIsChangingRoot(true);
-    setListInfo({ root: root, limit: undefined });
-    if (!dirSelectorMode) {
-      setPath(root);
-    }
+    limit.current = undefined;
+    setCurDir(root);
     setSelectedRowKeys([]);
     onChange?.(root);
   };
@@ -249,7 +246,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
       render(name: string, record) {
         if (name == '..') {
           return (
-            <SimpleButton onClick={() => parent !== undefined && listInfo.root !== '' && changeRoot(parent)} color="magenta">
+            <SimpleButton disabled={curDir === ''} onClick={() => curDir !== '' && changeRoot(parent)} color="magenta">
               <IconFolderDelete style={{ marginRight: 6 }} />
               返回上级
             </SimpleButton>
@@ -319,7 +316,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
                 type="text"
                 style={{ height: 'unset', padding: '0 4px', fontSize: 14 }}
                 onClick={() => {
-                  setModelInfo({ mode: 'move', root: listInfo.root, visible: true, srcPaths: [record.key] });
+                  setModelInfo({ mode: 'move', root: curDir, visible: true, srcPaths: [record.key] });
                 }}
               >
                 移动
@@ -328,7 +325,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
                 type="text"
                 style={{ height: 'unset', padding: '0 4px', fontSize: 14 }}
                 onClick={() => {
-                  setModelInfo({ mode: 'copy', root: listInfo.root, visible: true, srcPaths: [record.key] });
+                  setModelInfo({ mode: 'copy', root: curDir, visible: true, srcPaths: [record.key] });
                 }}
               >
                 复制
@@ -419,7 +416,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
     columns.splice(3, 1);
     columns.splice(1, 1);
   }
-  const pathParts = listInfo.root.split('/');
+  const pathParts = curDir.split('/');
 
   return (
     <div>
@@ -429,7 +426,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
             <Input
               style={{ width: '100%' }}
               autoFocus
-              defaultValue={listInfo.root}
+              defaultValue={curDir}
               onPressEnter={({ target: { value } }) => {
                 if (!value.endsWith('/')) value += '/';
                 changeRoot(value);
@@ -475,20 +472,20 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
                         type="text"
                         style={{ height: 'unset', padding: '0 4px', fontSize: 14 }}
                         onClick={() => {
-                          if (listInfo.root === '') {
+                          if (curDir === '') {
                             Message.error('收藏根目录，图啥呢？');
-                          } else if (favorites.includes(listInfo.root)) {
-                            removeFavorite(listInfo.root);
+                          } else if (favorites.includes(curDir)) {
+                            removeFavorite(curDir);
                             Message.info('已取消收藏');
                             rerender();
                           } else {
-                            addFavorite(listInfo.root);
+                            addFavorite(curDir);
                             Message.info('已收藏');
                             rerender();
                           }
                         }}
                       >
-                        {favorites.includes(listInfo.root) ? <IconStarFill style={{ color: 'magenta' }} /> : <IconStar style={{ color: 'gray' }} />}
+                        {favorites.includes(curDir) ? <IconStarFill style={{ color: 'magenta' }} /> : <IconStar style={{ color: 'gray' }} />}
                       </Button>
                     )}
                   </Breadcrumb.Item>
@@ -516,7 +513,8 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
             style={{ height: 'unset', padding: '0 4px', fontSize: 14 }}
             key="more"
             onClick={() => {
-              setListInfo((r) => ({ ...r, limit: 0 }));
+              limit.current = 0;
+              updateFull();
             }}
           >
             加载全部
@@ -528,7 +526,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
                 type="text"
                 style={{ height: 'unset', padding: '0 4px', fontSize: 14 }}
                 onClick={() => {
-                  if (selectedRowKeys.length) setModelInfo({ mode: 'move', root: listInfo.root, visible: true, srcPaths: selectedRowKeys });
+                  if (selectedRowKeys.length) setModelInfo({ mode: 'move', root: curDir, visible: true, srcPaths: selectedRowKeys });
                   else Message.warning('未选择文件或目录');
                 }}
               >
@@ -538,7 +536,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
                 type="text"
                 style={{ height: 'unset', padding: '0 4px', fontSize: 14 }}
                 onClick={() => {
-                  if (selectedRowKeys.length) setModelInfo({ mode: 'copy', root: listInfo.root, visible: true, srcPaths: selectedRowKeys });
+                  if (selectedRowKeys.length) setModelInfo({ mode: 'copy', root: curDir, visible: true, srcPaths: selectedRowKeys });
                   else Message.warning('未选择文件或目录');
                 }}
               >
@@ -579,7 +577,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
                     }
                   }}
                   headers={{ ...oss }}
-                  data={{ path: listInfo.root }}
+                  data={{ path: curDir }}
                   renderUploadList={(fileList, props) => {
                     return (
                       uploadFileListRef.current &&
@@ -692,7 +690,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
           }
           visible={modelInfo.visible}
           onOk={async () => {
-            if ((modelInfo.targetDir !== undefined && modelInfo.targetDir !== listInfo.root) || modelInfo.rename) {
+            if ((modelInfo.targetDir !== undefined && modelInfo.targetDir !== curDir) || modelInfo.rename) {
               if (modelInfo.srcPaths.length == 1 && modelInfo.rename !== undefined && modelInfo.rename.includes('/')) {
                 if (modelInfo.srcPaths[0].endsWith('/')) {
                   if (modelInfo.rename.indexOf('/') !== modelInfo.rename.length - 1) {

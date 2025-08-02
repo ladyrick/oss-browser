@@ -301,14 +301,34 @@ async def preview_file(
     if file_size > 1024 * 1024:
         return err(f"file too large to preview: {file_size} larger than 1MB")
 
-    media_type = obj.content_type
-    if media_type is None or not (
-        media_type.startswith(("text/", "image/", "audio/", "video/"))
-        or media_type == "application/pdf"
-    ):
-        media_type = "text/plain"
-    if media_type.startswith("text/"):
-        media_type += ";charset=utf-8"
+    content = obj.read() or b""
+    is_pure_text = True
+    try:
+        content.decode("utf-8")
+    except Exception:
+        is_pure_text = False
+
+    if is_pure_text:
+        return Response(content, media_type="text/plain;charset=utf-8")
+
+    if obj.content_type in {
+        "image/bmp",
+        "image/gif",
+        "image/jpeg",
+        "image/jpg",
+        "image/png",
+        "image/svg+xml",
+        "image/webp",
+        "audio/aac",
+        "application/pdf",
+        "video/mp4",
+    }:
+        # 这些是 chrome 可以直接预览的格式。
+        media_type = obj.content_type
+    else:
+        # 其余的都解析成文本文件预览，哪怕是乱码
+        media_type = "text/plain;charset=utf-8"
+
     return Response(obj.read(), media_type=media_type)
 
 
