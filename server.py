@@ -4,9 +4,19 @@ import pathlib
 from concurrent.futures import ThreadPoolExecutor
 
 import oss2
-from fastapi import Body, FastAPI, File, Form, Header, HTTPException, Path, UploadFile
+from fastapi import (
+    Body,
+    FastAPI,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Path,
+    Response,
+    UploadFile,
+)
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
@@ -261,6 +271,45 @@ async def rename_file(
         return JSONResponse({"ok": True})
     failed = _move_file(oss_bucket, [file_key], [new_key])
     return JSONResponse({"ok": not failed, "failed": failed}, status_code=200)
+
+
+@app.post("/api/preview/")
+async def preview_file(
+    key: str = Header(..., description="OSS AccessKey"),
+    secret: str = Header(..., description="OSS SecretKey"),
+    endpoint: str = Header(..., description="OSS Endpoint"),
+    bucket: str = Header(..., description="OSS Bucket 名称"),
+    file_key: str = Body(..., embed=True),
+):
+    def err(msg: str):
+        return PlainTextResponse(msg, 400)
+
+    if file_key.endswith("/") or file_key == "":
+        return err("cannot preview a directory")
+    try:
+        oss_bucket = get_oss_bucket(key, secret, endpoint, bucket)
+    except HTTPException as e:
+        return err(e.detail)
+    try:
+        obj = oss_bucket.get_object(file_key)
+    except oss2.exceptions.NoSuchKey:
+        return err("file not exist")
+
+    file_size = obj.content_length or 0
+    if file_size <= 0:
+        return err("file is empty")
+    if file_size > 1024 * 1024:
+        return err(f"file too large to preview: {file_size} larger than 1MB")
+
+    media_type = obj.content_type
+    if media_type is None or not (
+        media_type.startswith(("text/", "image/", "audio/", "video/"))
+        or media_type == "application/pdf"
+    ):
+        media_type = "text/plain"
+    if media_type.startswith("text/"):
+        media_type += ";charset=utf-8"
+    return Response(obj.read(), media_type=media_type)
 
 
 def _validate_src(bucket: oss2.Bucket, source_keys: list[str]):

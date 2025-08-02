@@ -1,7 +1,6 @@
 import {
   Breadcrumb,
   Button,
-  Form,
   Grid,
   Input,
   Message,
@@ -342,6 +341,37 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
                 }}
               >
                 重命名
+              </Button>
+              <Button
+                type="text"
+                style={{ height: 'unset', padding: '0 4px', fontSize: 14 }}
+                disabled={record.name.endsWith('/')}
+                onClick={async () => {
+                  // 考虑了几种预览的方式：
+                  // 1. 直接在新窗口打开文件的 share url。这样就跟下载一样了。
+                  // 2. 在当前页面，获取文件内容。一方面由于跨域问题，需要一个 proxy，另一方面一次只能预览一个文件。
+                  // 3. 在新页面打开一个类似 /api/prewview/<file_key> 的 proxy 链接。二进制文件还是会自动下载。
+                  // 4. 在新页面打开 dataurl。url 太长太丑了。
+                  // 5. 最终采用了 blob url 的方式。缺点是 ctrl-s 保存时无法识别文件名，而且当前页面关闭后，预览页面也不能再刷新了。
+                  try {
+                    const rsp = await axios.post(
+                      ORIGIN + '/api/preview/',
+                      { file_key: record.key },
+                      { headers: { ...oss }, responseType: 'arraybuffer' },
+                    );
+                    const arraybuffer = rsp.data;
+                    const blob = new Blob([arraybuffer], { type: rsp.headers['content-type'] });
+                    const blobUrl = URL.createObjectURL(blob);
+                    window.open(blobUrl, '_blank');
+                  } catch (e) {
+                    if (axios.isAxiosError(e)) {
+                      return void Message.error({ content: new TextDecoder().decode(e.response?.data) });
+                    }
+                    throw e;
+                  }
+                }}
+              >
+                预览
               </Button>
               <Button
                 type="text"
