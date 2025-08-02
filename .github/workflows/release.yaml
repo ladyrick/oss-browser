@@ -35,17 +35,15 @@ jobs:
       - name: build
         run: ./build.sh
 
-      - name: Set dynamic tag
-        id: set_tag
-        run: |
-          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-8)
-          DATE=$(TZ=UTC-8 date +'%Y%m%d')
-          echo "TAG_NAME=autobuild-$DATE-$SHORT_SHA" >> $GITHUB_OUTPUT
+      - name: delete old auto-build
+        run: gh release delete auto-build --cleanup-tag || true; git push origin --delete tag auto-build || true
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: upload
         uses: ncipollo/release-action@v1
         with:
-          tag: ${{ steps.set_tag.outputs.TAG_NAME }}
+          tag: auto-build
           artifacts: "oss-browser.tar.gz"
           replacesArtifacts: true
           allowUpdates: true
