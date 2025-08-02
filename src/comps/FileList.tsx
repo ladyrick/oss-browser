@@ -156,7 +156,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
   const [isChangingRoot, setIsChangingRoot] = useState(false);
 
-  if (!isChangingRoot && pathOnUrl != listInfo.root) {
+  if (!isChangingRoot && !dirSelectorMode && pathOnUrl != listInfo.root) {
     setListInfo({ ...listInfo, root: pathOnUrl });
   }
 
