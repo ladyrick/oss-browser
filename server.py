@@ -329,7 +329,7 @@ async def preview_file(
         # 其余的都解析成文本文件预览，哪怕是乱码
         media_type = "text/plain;charset=utf-8"
 
-    return Response(obj.read(), media_type=media_type)
+    return Response(content, media_type=media_type)
 
 
 def _validate_src(bucket: oss2.Bucket, source_keys: list[str]):
