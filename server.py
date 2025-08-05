@@ -504,7 +504,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "__main__:app",
         host="127.0.0.1",
-        port=int(os.getenv("PORT", 8000)),
+        port=int(os.getenv("PORT", 3000)) if PROD else 8000,
         reload=not PROD,
         workers=4,
         log_level="info",

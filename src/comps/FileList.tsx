@@ -56,6 +56,10 @@ const defaultNameSorter = (a: FileType, b: FileType) => {
   if (a_isdir !== b_isdir) {
     return Number(b_isdir) - Number(a_isdir);
   }
+  if (a_isdir) {
+    // 文件夹排序时，不要把后缀 / 纳入排序
+    return naturalSort(a.name.substring(0, a.name.length - 1), b.name.substring(0, b.name.length - 1));
+  }
   return naturalSort(a.name, b.name);
 };
 
@@ -315,6 +319,16 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
               <Button
                 type="text"
                 style={{ height: 'unset', padding: '0 4px', fontSize: 14 }}
+                onClick={async () => {
+                  await clipboard(record.key);
+                  Message.success({ content: `已复制：${record.key}` });
+                }}
+              >
+                KEY
+              </Button>
+              <Button
+                type="text"
+                style={{ height: 'unset', padding: '0 4px', fontSize: 14 }}
                 onClick={() => {
                   setModelInfo({ mode: 'move', root: curDir, visible: true, srcPaths: [record.key] });
                 }}
@@ -421,7 +435,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
   return (
     <div>
       <Space direction="vertical" style={{ width: '100%' }}>
-        <div style={{ marginTop: dirSelectorMode ? 0 : 10, marginBottom: 10 }}>
+        <div style={{ marginTop: dirSelectorMode ? 0 : 10, marginBottom: 10, marginLeft: 5 }}>
           {editPath ? (
             <Input
               style={{ width: '100%' }}
@@ -439,7 +453,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
               }}
             />
           ) : (
-            <Space>
+            <Space style={{ height: 32 }}>
               <IconEdit
                 key="1"
                 style={{ color: 'var(--color-text-3)', fontSize: 16, verticalAlign: 'text-bottom', cursor: 'pointer' }}
