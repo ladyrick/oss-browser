@@ -77,7 +77,7 @@ def get_oss_bucket(
     access_key: str, secret_key: str, endpoint: str, bucket_name: str
 ) -> oss2.Bucket:
     try:
-        auth = oss2.Auth(access_key, secret_key)
+        auth = oss2.AuthV2(access_key, secret_key)
         bucket = oss2.Bucket(auth, endpoint, bucket_name)
         bucket.object_exists("example")
     except oss2.exceptions.SignatureDoesNotMatch:
@@ -183,15 +183,22 @@ async def generate_share_url(
     secret: str = Header(..., description="OSS SecretKey"),
     endpoint: str = Header(..., description="OSS Endpoint"),
     bucket: str = Header(..., description="OSS Bucket 名称"),
-    file_key: str = Body(..., description="文件 Key"),
+    file_keys: list[str] = Body(..., description="文件 Key"),
     expire: int = Body(604800, description="有效期（秒，默认7天）"),
 ):
+    for file_key in file_keys:
+        if not file_key or file_key.endswith("/"):
+            return JSONResponse({"err": f"not a file: {file_key!r}"}, status_code=400)
     oss_bucket = get_oss_bucket(key, secret, endpoint, bucket)
-    try:
-        share_url = oss_bucket.sign_url("GET", file_key, expire, slash_safe=True)
-        return JSONResponse({"share_url": share_url})
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"生成分享链接失败: {str(e)}")
+    share_urls = []
+    for file_key in file_keys:
+        try:
+            share_urls.append(
+                oss_bucket.sign_url("GET", file_key, expire, slash_safe=True)
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"生成分享链接失败: {str(e)}")
+    return JSONResponse({"share_urls": dict(zip(file_keys, share_urls))})
 
 
 @app.post("/api/delete/")

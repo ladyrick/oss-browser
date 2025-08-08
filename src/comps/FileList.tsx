@@ -75,9 +75,9 @@ const renderSize = (size: number) => {
   return `${Math.floor(size)} TB`;
 };
 
-const createShareUrl = async (oss: OssInfo, key: string, expire?: number) => {
-  const { data } = await axios.post(ORIGIN + '/api/share/', { file_key: key, expire }, { headers: { ...oss } });
-  return data.share_url as string;
+const createShareUrl = async (oss: OssInfo, keys: string[], expire?: number) => {
+  const { data } = await axios.post(ORIGIN + '/api/share/', { file_keys: keys, expire }, { headers: { ...oss } });
+  return data.share_urls as Record<string, string>;
 };
 
 const downloadFile = (url: string, filename: string) => {
@@ -389,7 +389,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
                 style={{ height: 'unset', padding: '0 4px', fontSize: 14 }}
                 disabled={record.name.endsWith('/')}
                 onClick={async () => {
-                  const url = await createShareUrl(oss, record.key);
+                  const url = (await createShareUrl(oss, [record.key]))[record.key];
                   downloadFile(url, record.name);
                 }}
               >
@@ -400,7 +400,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
                 style={{ height: 'unset', padding: '0 4px', fontSize: 14 }}
                 disabled={record.name.endsWith('/')}
                 onClick={async () => {
-                  const url = await createShareUrl(oss, record.key, 365 * 86400);
+                  const url = (await createShareUrl(oss, [record.key], 365 * 86400))[record.key];
                   await clipboard(url);
                   Notification.success({ title: '已复制分享链接，有效期 1 年', content: url });
                 }}
@@ -555,6 +555,34 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
                 }}
               >
                 批量复制
+              </Button>
+              <Button
+                type="text"
+                style={{ height: 'unset', padding: '0 4px', fontSize: 14 }}
+                onClick={() => {
+                  if (!selectedRowKeys.length) {
+                    Message.warning('未选择文件');
+                  } else {
+                    for (const key of selectedRowKeys) {
+                      if (!key || key.endsWith('/')) {
+                        Message.error('不支持下载文件夹！');
+                        return;
+                      }
+                    }
+                    Modal.confirm({
+                      title: `确认下载 ${selectedRowKeys.length} 个文件？`,
+                      content: `如果没反应，请检查浏览器是不是拦截了弹出多个窗口。`,
+                      async onOk() {
+                        const urls = await createShareUrl(oss, selectedRowKeys);
+                        for (const key in urls) {
+                          downloadFile(urls[key], getBasename(key));
+                        }
+                      },
+                    });
+                  }
+                }}
+              >
+                批量下载
               </Button>
               <Button
                 type="text"
