@@ -157,7 +157,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
   const [, setCounter2] = useState(0);
   const [sortField, setSortField] = useState<string | number>();
   const [sortDirection, setSortDirection] = useState<'ascend' | 'descend'>();
-  const [modelInfo, setModelInfo] = useState<ModelInfo>();
+  const [moveOrCopyInfo, setMoveOrCopyInfo] = useState<ModelInfo>();
   const [renameInfo, setRenameInfo] = useState<RenameInfo>();
   const [editPath, setEditPath] = useState(false);
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
@@ -330,7 +330,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
                 type="text"
                 style={{ height: 'unset', padding: '0 4px', fontSize: 14 }}
                 onClick={() => {
-                  setModelInfo({ mode: 'move', root: curDir, visible: true, srcPaths: [record.key] });
+                  setMoveOrCopyInfo({ mode: 'move', root: curDir, visible: true, srcPaths: [record.key] });
                 }}
               >
                 移动
@@ -339,7 +339,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
                 type="text"
                 style={{ height: 'unset', padding: '0 4px', fontSize: 14 }}
                 onClick={() => {
-                  setModelInfo({ mode: 'copy', root: curDir, visible: true, srcPaths: [record.key] });
+                  setMoveOrCopyInfo({ mode: 'copy', root: curDir, visible: true, srcPaths: [record.key] });
                 }}
               >
                 复制
@@ -438,6 +438,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
         <div style={{ marginTop: dirSelectorMode ? 0 : 10, marginBottom: 10, marginLeft: 5 }}>
           {editPath ? (
             <Input
+              spellCheck={false}
               style={{ width: '100%' }}
               autoFocus
               defaultValue={curDir}
@@ -540,7 +541,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
                 type="text"
                 style={{ height: 'unset', padding: '0 4px', fontSize: 14 }}
                 onClick={() => {
-                  if (selectedRowKeys.length) setModelInfo({ mode: 'move', root: curDir, visible: true, srcPaths: selectedRowKeys });
+                  if (selectedRowKeys.length) setMoveOrCopyInfo({ mode: 'move', root: curDir, visible: true, srcPaths: selectedRowKeys });
                   else Message.warning('未选择文件或目录');
                 }}
               >
@@ -550,7 +551,7 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
                 type="text"
                 style={{ height: 'unset', padding: '0 4px', fontSize: 14 }}
                 onClick={() => {
-                  if (selectedRowKeys.length) setModelInfo({ mode: 'copy', root: curDir, visible: true, srcPaths: selectedRowKeys });
+                  if (selectedRowKeys.length) setMoveOrCopyInfo({ mode: 'copy', root: curDir, visible: true, srcPaths: selectedRowKeys });
                   else Message.warning('未选择文件或目录');
                 }}
               >
@@ -719,23 +720,23 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
           </Grid.Col>
         </Grid.Row>
       </Space>
-      {!dirSelectorMode && modelInfo?.visible && (
+      {!dirSelectorMode && moveOrCopyInfo?.visible && (
         <Modal
           title={
-            modelInfo.mode === 'move'
-              ? modelInfo.srcPaths.length == 1
-                ? `移动${modelInfo.srcPaths[0].endsWith('/') ? '目录' : '文件'} ${getBasename(modelInfo.srcPaths[0])} 到`
-                : `移动 ${modelInfo.srcPaths.length} 个文件/目录到`
-              : modelInfo.srcPaths.length == 1
-                ? `复制${modelInfo.srcPaths[0].endsWith('/') ? '目录' : '文件'} ${getBasename(modelInfo.srcPaths[0])} 到`
-                : `复制 ${modelInfo.srcPaths.length} 个文件/目录到`
+            moveOrCopyInfo.mode === 'move'
+              ? moveOrCopyInfo.srcPaths.length == 1
+                ? `移动${moveOrCopyInfo.srcPaths[0].endsWith('/') ? '目录' : '文件'} ${getBasename(moveOrCopyInfo.srcPaths[0])} 到`
+                : `移动 ${moveOrCopyInfo.srcPaths.length} 个文件/目录到`
+              : moveOrCopyInfo.srcPaths.length == 1
+                ? `复制${moveOrCopyInfo.srcPaths[0].endsWith('/') ? '目录' : '文件'} ${getBasename(moveOrCopyInfo.srcPaths[0])} 到`
+                : `复制 ${moveOrCopyInfo.srcPaths.length} 个文件/目录到`
           }
-          visible={modelInfo.visible}
+          visible={moveOrCopyInfo.visible}
           onOk={async () => {
-            if ((modelInfo.targetDir !== undefined && modelInfo.targetDir !== curDir) || modelInfo.rename) {
-              if (modelInfo.srcPaths.length == 1 && modelInfo.rename !== undefined && modelInfo.rename.includes('/')) {
-                if (modelInfo.srcPaths[0].endsWith('/')) {
-                  if (modelInfo.rename.indexOf('/') !== modelInfo.rename.length - 1) {
+            if ((moveOrCopyInfo.targetDir !== undefined && moveOrCopyInfo.targetDir !== curDir) || moveOrCopyInfo.rename) {
+              if (moveOrCopyInfo.srcPaths.length == 1 && moveOrCopyInfo.rename && moveOrCopyInfo.rename.includes('/')) {
+                if (moveOrCopyInfo.srcPaths[0].endsWith('/')) {
+                  if (moveOrCopyInfo.rename.indexOf('/') !== moveOrCopyInfo.rename.length - 1) {
                     Message.error('新名称无效，除非位于末尾，否则 / 无法用于目录名！');
                     return;
                   }
@@ -745,37 +746,54 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
                 }
               }
 
-              setModelInfo({ ...modelInfo, loading: true });
+              setMoveOrCopyInfo({ ...moveOrCopyInfo, loading: true });
               try {
-                await axios.post(
-                  ORIGIN + `/api/${modelInfo.mode}/`,
+                const rsp = await axios.post(
+                  ORIGIN + `/api/${moveOrCopyInfo.mode}/`,
                   {
-                    src_keys: modelInfo.srcPaths,
-                    target_dir: modelInfo.targetDir || modelInfo.root,
-                    rename: modelInfo.srcPaths.length === 1 ? modelInfo.rename || undefined : undefined,
+                    src_keys: moveOrCopyInfo.srcPaths,
+                    target_dir: moveOrCopyInfo.targetDir || moveOrCopyInfo.root,
+                    rename:
+                      moveOrCopyInfo.srcPaths.length === 1 &&
+                      moveOrCopyInfo.rename &&
+                      ![moveOrCopyInfo.rename, moveOrCopyInfo.rename + '/'].includes(getBasename(moveOrCopyInfo.srcPaths[0]))
+                        ? moveOrCopyInfo.rename.endsWith('/')
+                          ? moveOrCopyInfo.rename.slice(0, -1)
+                          : moveOrCopyInfo.rename
+                        : undefined,
                   },
                   { headers: { ...oss } },
                 );
-                Message.success((modelInfo.mode === 'move' ? '移动' : '复制') + '文件成功！');
+                if (rsp.data.ok) Message.success((moveOrCopyInfo.mode === 'move' ? '移动' : '复制') + '文件成功！');
+                else Message.success(`部分文件${moveOrCopyInfo.mode === 'move' ? '移动' : '复制'}成功。`);
                 updateFull();
-              } catch {
-                Message.error((modelInfo.mode === 'move' ? '移动' : '复制') + '文件失败！');
+              } catch (e) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const err: string = (e as any)?.response?.data?.err || '';
+                Message.error({
+                  content: (
+                    <>
+                      {moveOrCopyInfo.mode === 'move' ? '移动' : '复制'}文件失败！
+                      <div>{err}</div>
+                    </>
+                  ),
+                });
               }
             } else {
               Message.warning('源文件夹跟目标文件夹为同一文件夹！');
               return;
             }
-            setModelInfo(undefined);
+            setMoveOrCopyInfo(undefined);
           }}
-          onCancel={() => setModelInfo(undefined)}
+          onCancel={() => setMoveOrCopyInfo(undefined)}
           style={{ width: '50%' }}
         >
-          <Spin loading={modelInfo.loading} style={{ width: '100%' }}>
+          <Spin loading={moveOrCopyInfo.loading} style={{ width: '100%' }}>
             <FileList
-              root={modelInfo.root}
+              root={moveOrCopyInfo.root}
               dirSelectorMode
               onChange={(dir) => {
-                setModelInfo({ ...modelInfo, targetDir: dir });
+                setMoveOrCopyInfo({ ...moveOrCopyInfo, targetDir: dir });
               }}
             />
             <Grid.Row gutter={8} style={{ marginTop: 15 }}>
@@ -784,10 +802,16 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
               </Grid.Col>
               <Grid.Col span={19}>
                 <Input
-                  disabled={modelInfo.srcPaths.length !== 1}
-                  placeholder={getBasename(modelInfo.srcPaths[0])}
+                  spellCheck={false}
+                  disabled={moveOrCopyInfo.srcPaths.length !== 1}
+                  value={moveOrCopyInfo.srcPaths.length !== 1 ? undefined : moveOrCopyInfo.rename}
+                  placeholder={moveOrCopyInfo.srcPaths.length !== 1 ? '无法重命名多个对象' : getBasename(moveOrCopyInfo.srcPaths[0])}
                   onChange={(value) => {
-                    setModelInfo({ ...modelInfo, rename: value || undefined });
+                    setMoveOrCopyInfo({ ...moveOrCopyInfo, rename: value || undefined });
+                  }}
+                  onFocus={() => {
+                    if (moveOrCopyInfo.srcPaths.length === 1 && !moveOrCopyInfo.rename)
+                      setMoveOrCopyInfo({ ...moveOrCopyInfo, rename: getBasename(moveOrCopyInfo.srcPaths[0]) });
                   }}
                 />
               </Grid.Col>
@@ -800,22 +824,33 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
           title={`重命名：${renameInfo.name}`}
           visible={renameInfo.visible}
           onOk={async () => {
-            if (renameInfo.name === renameInfo.new_name) {
-              Message.error('新名称跟当前名称相同！');
+            const new_name = renameInfo.new_name === undefined ? renameInfo.name : renameInfo.new_name;
+            if (!new_name || (renameInfo.name.endsWith('/') && new_name === '/')) {
+              Message.warning('禁止重命名为空！');
               return;
             }
-            if (!renameInfo.new_name) {
-              Message.warning('禁止重命名为空字符串，你把握不住');
+            if (new_name.includes('/'))
+              if (renameInfo.name.endsWith('/')) {
+                if (new_name.indexOf('/') !== new_name.length - 1) {
+                  Message.error('新名称无效，除非位于末尾，否则 / 无法用于目录名！');
+                  return;
+                }
+              } else {
+                Message.error('新名称无效，/ 无法用于文件名！');
+                return;
+              }
+
+            if ([new_name, new_name + '/'].includes(renameInfo.name)) {
+              Message.error('新名称跟当前名称相同！');
               return;
             }
             setRenameInfo({ ...renameInfo, loading: true });
             try {
-              console.log(renameInfo);
               await axios.post(
                 ORIGIN + `/api/rename/`,
                 {
                   file_key: renameInfo.file_key,
-                  new_name: renameInfo.new_name || '',
+                  new_name: new_name.endsWith('/') ? new_name.slice(0, -1) : new_name,
                 },
                 { headers: { ...oss } },
               );
@@ -824,13 +859,15 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
             } catch {
               Message.error('重命名失败！');
             }
-            setRenameInfo({ ...renameInfo, visible: false, loading: false });
+            setRenameInfo(undefined);
           }}
-          onCancel={() => setRenameInfo({ ...renameInfo, visible: false, loading: false })}
+          onCancel={() => setRenameInfo(undefined)}
         >
           <Spin loading={renameInfo.loading} style={{ width: '100%' }}>
             <Input
+              value={renameInfo.new_name === undefined ? renameInfo.name : renameInfo.new_name}
               placeholder={renameInfo.name}
+              spellCheck={false}
               onChange={(new_name) => {
                 setRenameInfo({ ...renameInfo, new_name });
               }}

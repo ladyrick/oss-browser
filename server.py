@@ -54,7 +54,7 @@ def get_target_path(source_key: str, target_dir: str, rename=""):
     assert target_dir == "" or target_dir.endswith("/")
     if not rename:
         return target_dir + get_basename(source_key)
-    return target_dir + rename.rstrip("/") + "/" * source_key.endswith("/")
+    return target_dir + rename + "/" * source_key.endswith("/")
 
 
 @app.get("/")
@@ -228,16 +228,20 @@ async def copy_file(
     bucket: str = Header(..., description="OSS Bucket 名称"),
     src_keys: list[str] = Body(..., description="文件 Key"),
     target_dir: str = Body(..., pattern=r"^(|.*/)$", description="目标文件夹"),
-    rename: str = Body("", pattern=r"^[^/]*/?$", description="复制的同时重命名"),
+    rename: str = Body("", pattern=r"^[^/]*$", description="复制的同时重命名"),
 ):
+    if rename and len(src_keys) > 1:
+        return JSONResponse(
+            {"err": "cannot rename more than one file/directory"}, status_code=400
+        )
     oss_bucket = get_oss_bucket(key, secret, endpoint, bucket)
-
-    failed = _copy_file(
+    failed, err = _copy_file(
         oss_bucket,
         src_keys,
         [get_target_path(s, target_dir, rename) for s in src_keys],
     )
-
+    if err:
+        return JSONResponse({"err": err}, status_code=400)
     return JSONResponse({"ok": not failed, "failed": failed}, status_code=200)
 
 
@@ -249,16 +253,20 @@ async def move_file(
     bucket: str = Header(..., description="OSS Bucket 名称"),
     src_keys: list[str] = Body(..., description="文件 Key"),
     target_dir: str = Body(..., pattern=r"^(|.*/)$", description="目标文件夹"),
-    rename: str = Body("", pattern=r"^[^/]*/?$", description="复制的同时重命名"),
+    rename: str = Body("", pattern=r"^[^/]*$", description="复制的同时重命名"),
 ):
     oss_bucket = get_oss_bucket(key, secret, endpoint, bucket)
-
-    failed = _move_file(
+    if rename and len(src_keys) > 1:
+        return JSONResponse(
+            {"err": "cannot rename more than one file/directory"}, status_code=400
+        )
+    failed, err = _move_file(
         oss_bucket,
         src_keys,
         [get_target_path(s, target_dir, rename) for s in src_keys],
     )
-
+    if err:
+        return JSONResponse({"err": err}, status_code=400)
     return JSONResponse({"ok": not failed, "failed": failed}, status_code=200)
 
 
@@ -446,7 +454,7 @@ def _move_file(
         bucket, source_keys, target_keys, allow_overwrite
     )
     if err is not None:
-        return err
+        return [], err
     assert s_keys is not None and t_keys is not None
 
     def _move(s_t: tuple[str, str]):
@@ -472,7 +480,7 @@ def _move_file(
         for s, t, err in zip(s_keys, t_keys, executor.map(_move, zip(s_keys, t_keys))):
             if err is not None:
                 failed.append({"src": s, "tgt": t, "err": err})
-    return failed
+    return failed, None
 
 
 def _copy_file(
@@ -485,7 +493,7 @@ def _copy_file(
         bucket, source_keys, target_keys, allow_overwrite
     )
     if err is not None:
-        return err
+        return [], err
     assert s_keys is not None and t_keys is not None, "make type hint happy"
 
     def _copy(s_t: tuple[str, str]):
@@ -502,7 +510,7 @@ def _copy_file(
         for s, t, err in zip(s_keys, t_keys, executor.map(_copy, zip(s_keys, t_keys))):
             if err is not None:
                 failed.append({"src": s, "tgt": t, "err": err})
-    return failed
+    return failed, None
 
 
 if __name__ == "__main__":
