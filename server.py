@@ -98,7 +98,7 @@ async def list_files(
     endpoint: str = Header(..., description="OSS Endpoint"),
     bucket: str = Header(..., description="OSS Bucket 名称"),
     path: str = Body("", pattern=r"^(|.*/)$", description="文件路径"),
-    limit: int = Body(100, description="单次返回数量限制，避免卡死"),
+    limit: int = Body(200, description="单次返回数量限制，避免卡死"),
     dir: bool = Body(False, description="只返回目录"),
 ):
     """列出 OSS 文件/目录"""
@@ -194,7 +194,7 @@ async def generate_share_url(
     for file_key in file_keys:
         try:
             share_urls.append(
-                oss_bucket.sign_url("GET", file_key, expire, slash_safe=True)
+                oss_bucket.sign_url("GET", file_key, expire, slash_safe=False)
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"生成分享链接失败: {str(e)}")
@@ -294,7 +294,8 @@ async def preview_file(
     secret: str = Header(..., description="OSS SecretKey"),
     endpoint: str = Header(..., description="OSS Endpoint"),
     bucket: str = Header(..., description="OSS Bucket 名称"),
-    file_key: str = Body(..., embed=True),
+    file_key: str = Body(..., description="文件 key"),
+    max_size: int = Body(1024 * 1024, description="最大不截断文件大小"),
 ):
     def err(msg: str):
         return PlainTextResponse(msg, 400)
@@ -313,18 +314,22 @@ async def preview_file(
     file_size = obj.content_length or 0
     if file_size <= 0:
         return err("file is empty")
-    if file_size > 1024 * 1024:
-        return err(f"file too large to preview: {file_size} larger than 1MB")
-
-    content = obj.read() or b""
+    truncated = file_size > max_size
+    if truncated:
+        content = obj.read(max_size)
+    else:
+        content = obj.read() or b""
+    assert isinstance(content, bytes)
+    headers = {"truncated": str(int(truncated)), "file_size": str(file_size)}
     is_pure_text = True
-    try:
-        content.decode("utf-8")
-    except Exception:
-        is_pure_text = False
+    if not truncated:
+        try:
+            content.decode("utf-8")
+        except Exception:
+            is_pure_text = False
 
-    if is_pure_text:
-        return Response(content, media_type="text/plain;charset=utf-8")
+    if truncated or is_pure_text:
+        return Response(content, media_type="text/plain;charset=utf-8", headers=headers)
 
     if obj.content_type in {
         "image/bmp",
@@ -344,7 +349,7 @@ async def preview_file(
         # 其余的都解析成文本文件预览，哪怕是乱码
         media_type = "text/plain;charset=utf-8"
 
-    return Response(content, media_type=media_type)
+    return Response(content, media_type=media_type, headers=headers)
 
 
 def _validate_src(bucket: oss2.Bucket, source_keys: list[str]):

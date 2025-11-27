@@ -364,10 +364,14 @@ export const FileList: React.FC<Props> = ({ root: initRoot = '', dirSelectorMode
                   // 3. 在新页面打开一个类似 /api/prewview/<file_key> 的 proxy 链接。二进制文件还是会自动下载。
                   // 4. 在新页面打开 dataurl。url 太长太丑了。
                   // 5. 最终采用了 blob url 的方式。缺点是 ctrl-s 保存时无法识别文件名，而且当前页面关闭后，预览页面也不能再刷新了。
+                  const max_size = 1024 * 1024;
+                  if ((record.size || 0) > max_size) {
+                    Message.warning({ content: `文件过大！仅预览头部 ${max_size} 字节。` });
+                  }
                   try {
                     const rsp = await axios.post(
                       ORIGIN + '/api/preview/',
-                      { file_key: record.key },
+                      { file_key: record.key, max_size },
                       { headers: { ...oss }, responseType: 'arraybuffer' },
                     );
                     const arraybuffer = rsp.data;
